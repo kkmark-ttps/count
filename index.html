@@ -173,7 +173,50 @@
         </div>
     </div>
 
-    <!-- 💡新增：自訂警告視窗 (Custom Alert) -->
+    <!-- 💡新增：編輯紀錄 Modal -->
+    <div id="editModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white w-full max-w-sm rounded-[2.5rem] p-6 space-y-4 shadow-2xl overflow-y-auto max-h-[90vh]">
+            <div class="flex justify-between items-center mb-2">
+                <h3 class="text-xl font-extrabold text-gray-800">編輯紀錄</h3>
+                <button onclick="closeEditModal()" class="p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition"><i data-lucide="x" class="w-4 h-4"></i></button>
+            </div>
+            
+            <div class="flex p-1 bg-gray-100 rounded-xl">
+                <button onclick="setEditType('支出')" id="btn-edit-type-expense" class="flex-1 py-2 rounded-lg font-bold text-sm transition">支出</button>
+                <button onclick="setEditType('收入')" id="btn-edit-type-income" class="flex-1 py-2 rounded-lg font-bold text-sm transition">收入</button>
+            </div>
+
+            <div class="space-y-4">
+                <div class="relative">
+                    <span class="absolute left-0 bottom-3 text-gray-400 font-medium">NT$</span>
+                    <input type="text" inputmode="decimal" id="editAmount" class="w-full pl-10 text-4xl font-bold border-b-2 border-gray-100 focus:border-blue-500 outline-none pb-2">
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-[10px] font-bold text-gray-400 mb-1 uppercase">主要分類</label>
+                        <select id="editCategory" class="w-full bg-gray-50 rounded-xl p-3 text-sm border-none ring-1 ring-gray-200"></select>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-gray-400 mb-1 uppercase">日期</label>
+                        <input type="date" id="editDate" class="w-full bg-gray-50 rounded-xl p-3 text-sm border-none ring-1 ring-gray-200">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-[10px] font-bold text-gray-400 mb-1 uppercase">標籤 (空格分隔)</label>
+                    <input type="text" id="editTags" class="w-full bg-gray-50 rounded-xl p-3 text-sm border-none ring-1 ring-gray-200">
+                </div>
+                <div>
+                    <label class="block text-[10px] font-bold text-gray-400 mb-1 uppercase">備註說明</label>
+                    <input type="text" id="editNote" class="w-full bg-gray-50 rounded-xl p-3 text-sm border-none ring-1 ring-gray-200">
+                </div>
+            </div>
+            <button onclick="saveEditRecord()" id="saveEditBtn" class="w-full bg-blue-600 text-white font-bold py-4 rounded-2xl shadow-lg shadow-blue-100 flex justify-center items-center gap-2 mt-4 hover:bg-blue-700 transition">
+                儲存變更
+            </button>
+        </div>
+    </div>
+
+    <!-- 自訂警告視窗 (Custom Alert) -->
     <div id="alertModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
         <div class="bg-white w-full max-w-sm rounded-[2rem] p-6 space-y-4 shadow-2xl">
             <h3 class="text-lg font-bold text-gray-800 flex items-center gap-2">
@@ -184,7 +227,7 @@
         </div>
     </div>
 
-    <!-- 💡新增：自訂確認視窗 (Custom Confirm) -->
+    <!-- 自訂確認視窗 (Custom Confirm) -->
     <div id="confirmModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
         <div class="bg-white w-full max-w-sm rounded-[2rem] p-6 space-y-4 shadow-2xl">
             <h3 class="text-lg font-bold text-gray-800 flex items-center gap-2">
@@ -200,18 +243,18 @@
 
     <script>
         let currentType = '支出';
+        let currentEditType = '支出';
+        let editingRecordId = null;
         let categories = { '收入': [], '支出': [] };
         let records = [];
         let accounts = [];
-        let confirmActionCallback = null; // 紀錄確認後要執行的動作
+        let confirmActionCallback = null; 
 
-        // 💡新增：控制自訂 Alert 的函數
         function customAlert(msg) {
             document.getElementById('alertMessage').textContent = msg;
             document.getElementById('alertModal').classList.remove('hidden');
         }
 
-        // 💡新增：控制自訂 Confirm 的函數
         function showConfirm(title, message, callback) {
             document.getElementById('confirmTitle').textContent = title;
             document.getElementById('confirmMessage').textContent = message;
@@ -229,7 +272,6 @@
             closeConfirm();
         });
 
-        // 顯示提示訊息 (Toast)
         function showToast(message, bgColor = '#10b981') {
             const toast = document.getElementById("toast");
             toast.textContent = message;
@@ -256,6 +298,15 @@
                 this.setSelectionRange(start, end);
             });
 
+            // 為編輯視窗的金額輸入框加入全形轉換
+            const editAmountInput = document.getElementById('editAmount');
+            editAmountInput.addEventListener('input', function(e) {
+                const start = this.selectionStart;
+                const end = this.selectionEnd;
+                this.value = toHalfWidth(this.value);
+                this.setSelectionRange(start, end);
+            });
+
             loadSettings();
             fetchData();
         };
@@ -276,7 +327,6 @@
         }
 
         function clearSettings() {
-            // 💡更新為使用自訂確認視窗
             showConfirm('重置設定', '確定要清除所有連線設定並重新載入嗎？', () => {
                 localStorage.clear(); 
                 window.location.reload(); 
@@ -294,6 +344,7 @@
             document.getElementById(`tab-${tab}`).className = "flex-1 py-2.5 rounded-xl font-bold text-xs transition tab-active";
         }
 
+        // 新增紀錄表單的類型切換
         function setType(type) {
             currentType = type;
             const isExp = type === '支出';
@@ -306,6 +357,21 @@
             const select = document.getElementById('inputCategory');
             select.innerHTML = '';
             (categories[currentType] || []).forEach(c => {
+                const opt = document.createElement('option');
+                opt.value = c.name; opt.textContent = c.name; select.appendChild(opt);
+            });
+        }
+
+        // 💡新增：編輯表單的類型切換與分類渲染
+        function setEditType(type) {
+            currentEditType = type;
+            const isExp = type === '支出';
+            document.getElementById('btn-edit-type-expense').className = isExp ? "flex-1 py-2 rounded-lg font-bold text-sm transition bg-rose-500 text-white shadow-md" : "flex-1 py-2 rounded-lg font-bold text-sm transition text-gray-500";
+            document.getElementById('btn-edit-type-income').className = !isExp ? "flex-1 py-2 rounded-lg font-bold text-sm transition bg-blue-600 text-white shadow-md" : "flex-1 py-2 rounded-lg font-bold text-sm transition text-gray-500";
+            
+            const select = document.getElementById('editCategory');
+            select.innerHTML = '';
+            (categories[currentEditType] || []).forEach(c => {
                 const opt = document.createElement('option');
                 opt.value = c.name; opt.textContent = c.name; select.appendChild(opt);
             });
@@ -369,7 +435,6 @@
             const btn = document.getElementById(`btn-acc-${name}`);
             let sanitizedAmount = parseFloat(toHalfWidth(document.getElementById(`acc-${name}`).value));
             
-            // 💡更新為使用自訂警告視窗
             if (isNaN(sanitizedAmount)) return customAlert("請輸入正確金額");
 
             btn.disabled = true;
@@ -395,7 +460,6 @@
             }
         }
 
-        // 💡更新：全新升級的明細渲染系統 (按月分組 + 結餘轉入)
         function renderHistory() {
             const list = document.getElementById('historyList');
             list.innerHTML = '';
@@ -405,13 +469,10 @@
                 return; 
             }
 
-            // 1. 將紀錄依照日期排序 (舊到新)，以利計算「滾動結餘」
             const sortedRecords = [...records].sort((a, b) => new Date(a['日期']) - new Date(b['日期']));
-            
             const groups = {};
-            let runningBalance = 0; // 全局滾動結餘
+            let runningBalance = 0;
 
-            // 2. 進行分組與計算結餘
             sortedRecords.forEach(r => {
                 const d = new Date(r['日期']);
                 const year = d.getFullYear();
@@ -424,7 +485,7 @@
                         records: [],
                         income: 0,
                         expense: 0,
-                        startBalance: runningBalance // 紀錄該月開始前的總結餘 (即上月結餘)
+                        startBalance: runningBalance
                     };
                 }
 
@@ -439,21 +500,17 @@
                     runningBalance += amt;
                 }
 
-                // 將明細塞入陣列開頭，這樣渲染時同月內「最新」的紀錄會在最上面
                 groups[monthKey].records.unshift(r); 
                 groups[monthKey].endBalance = runningBalance;
             });
 
-            // 3. 取得所有月份的 Key 並排序 (新到舊，讓最新的月份在最上面)
             const monthKeys = Object.keys(groups).sort((a, b) => b.localeCompare(a));
 
-            // 4. 開始渲染各月份區塊
             monthKeys.forEach((monthKey, index) => {
                 const group = groups[monthKey];
                 const monthBlock = document.createElement('div');
                 monthBlock.className = 'mb-8 bg-gray-50/50 rounded-[2rem] p-2 border border-gray-100';
                 
-                // 💡更新：月份標題與摘要 (加入上月結餘，並優化手機版四欄排版)
                 const headerHtml = `
                     <div class="flex flex-col sm:flex-row justify-between items-start sm:items-end mb-4 px-3 pt-2 pb-3 border-b border-gray-200/60 gap-3">
                         <h3 class="font-extrabold text-gray-800 text-lg">${monthKey}</h3>
@@ -483,7 +540,6 @@
 
                 const recordsContainer = monthBlock.querySelector(`[id^="records-"]`);
 
-                // 渲染該月所有明細
                 group.records.forEach(r => {
                     const isExp = r['類型'] === '支出';
                     const card = document.createElement('div');
@@ -493,6 +549,7 @@
                     const recordId = r['ID'] || r['id'] || r['Id'];
                     const dateString = new Date(r['日期']).toLocaleDateString('zh-TW');
 
+                    // 💡更新：在明細右側加入「編輯(筆)」圖示按鈕
                     card.innerHTML = `
                         <div class="flex items-center gap-3 text-left">
                             <div class="w-10 h-10 rounded-xl ${isExp ? 'bg-rose-50 text-rose-500' : 'bg-emerald-50 text-emerald-500'} flex items-center justify-center shadow-sm">
@@ -504,9 +561,12 @@
                                 <div class="flex gap-1 flex-wrap">${tags}</div>
                             </div>
                         </div>
-                        <div class="text-right flex items-center gap-3">
-                            <p class="font-bold ${isExp ? 'text-rose-500' : 'text-emerald-600'}">NT$ ${parseFloat(r['金額']).toLocaleString()}</p>
-                            <button onclick="deleteRecord('${recordId}')" class="bg-gray-100 text-gray-400 hover:text-rose-500 hover:bg-rose-50 transition p-2.5 rounded-xl cursor-pointer">
+                        <div class="text-right flex items-center gap-1 sm:gap-2">
+                            <p class="font-bold ${isExp ? 'text-rose-500' : 'text-emerald-600'} mr-1 sm:mr-2 text-sm">NT$ ${parseFloat(r['金額']).toLocaleString()}</p>
+                            <button onclick="openEditModal('${recordId}')" class="bg-gray-100 text-gray-400 hover:text-blue-500 hover:bg-blue-50 transition p-2 sm:p-2.5 rounded-xl cursor-pointer" title="編輯">
+                                <i data-lucide="pencil" class="w-4 h-4 pointer-events-none"></i>
+                            </button>
+                            <button onclick="deleteRecord('${recordId}')" class="bg-gray-100 text-gray-400 hover:text-rose-500 hover:bg-rose-50 transition p-2 sm:p-2.5 rounded-xl cursor-pointer" title="刪除">
                                 <i data-lucide="trash-2" class="w-4 h-4 pointer-events-none"></i>
                             </button>
                         </div>
@@ -514,8 +574,6 @@
                     recordsContainer.appendChild(card);
                 });
 
-                // 渲染「上月結餘轉入」 (放在該月清單的最下方，代表月初第一筆帳)
-                // 條件：只要不是您記帳生涯的「第一個月」，或是期初金額不為 0，就會顯示銜接紀錄
                 if (group.startBalance !== 0 || index < monthKeys.length - 1) {
                     const isPositive = group.startBalance >= 0;
                     const carryOverCard = document.createElement('div');
@@ -540,67 +598,154 @@
             const url = localStorage.getItem('gas_url');
             const sanitizedAmount = parseFloat(toHalfWidth(document.getElementById('inputAmount').value));
             
-            // 💡更新為使用自訂警告視窗
             if(isNaN(sanitizedAmount) || sanitizedAmount <= 0) return customAlert("請輸入正確的數字金額");
             
             const btn = document.getElementById('submitBtn');
             btn.disabled = true; btn.innerHTML = '<div class="loading-spinner"></div> 儲存中...';
             try {
-                const res = await fetch(url, { method: 'POST', body: JSON.stringify({ action: "addRecord", type: currentType, amount: sanitizedAmount, category: document.getElementById('inputCategory').value, date: document.getElementById('inputDate').value, note: document.getElementById('inputNote').value, tags: document.getElementById('inputTags').value }) });
+                const res = await fetch(url, { 
+                    method: 'POST', 
+                    body: JSON.stringify({ 
+                        action: "addRecord", 
+                        type: currentType, 
+                        amount: sanitizedAmount, 
+                        category: document.getElementById('inputCategory').value, 
+                        date: document.getElementById('inputDate').value, 
+                        note: document.getElementById('inputNote').value, 
+                        tags: document.getElementById('inputTags').value 
+                    }),
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' }
+                });
                 const result = await res.json();
                 
-                // 加入嚴謹的成功判斷
                 if (result.status === "success") {
                     document.getElementById('inputAmount').value = '';
+                    document.getElementById('inputNote').value = '';
+                    document.getElementById('inputTags').value = '';
                     showToast("紀錄儲存成功");
-                    await fetchData(); // 確保重新讀取完成後再切換畫面
+                    await fetchData(); 
                     switchTab('history');
                 } else {
-                    throw new Error("後端儲存失敗");
+                    throw new Error(result.message || "後端儲存失敗");
                 }
             } catch (err) { 
-                showToast("儲存失敗", "#ef4444");
+                customAlert("❌ 儲存失敗：" + err.message);
             } finally { btn.disabled = false; btn.innerHTML = '儲存紀錄'; }
         }
 
-        // 💡更新：將刪除功能完全改寫為使用自訂 Confirm 與 Alert 視窗
         function deleteRecord(id) {
             if(!id || id === 'undefined' || id === 'null' || id === '') {
-                customAlert("⚠️ 刪除失敗：這筆紀錄沒有有效 ID。\n\n可能原因：您是在試算表上手動輸入，或試算表的 A1 標題不是「ID」。\n請直接前往 Google 試算表手動刪除該列！");
+                customAlert("⚠️ 操作失敗：這筆紀錄沒有有效 ID。\n請直接前往 Google 試算表手動處理該列！");
                 return;
             }
 
             showConfirm('刪除紀錄', '確定要刪除這筆明細嗎？此操作將無法復原。', async () => {
                 const url = localStorage.getItem('gas_url');
-                
                 try {
                     const res = await fetch(url, { 
                         method: 'POST', 
                         body: JSON.stringify({ action: "deleteRecord", id: String(id) }),
                         headers: { 'Content-Type': 'text/plain;charset=utf-8' }
                     });
-                    
                     const textData = await res.text();
-                    
                     let result;
-                    try {
-                        result = JSON.parse(textData);
-                    } catch (parseError) {
-                        customAlert("❌ 刪除失敗！GAS 後端發生錯誤。\n\n【最常見原因】：更新程式碼後忘記選擇「新版本」部署。\n\n【後端實際回傳】：\n" + textData.substring(0, 150));
-                        return;
-                    }
+                    try { result = JSON.parse(textData); } catch (e) { throw new Error(textData.substring(0, 100)); }
                     
                     if (result.status === "success") {
                         showToast("紀錄已刪除", "#64748b");
                         await fetchData(); 
-                    } else {
-                        customAlert("❌ 刪除失敗，後端訊息：" + result.message);
-                    }
-                } catch (err) {
-                    customAlert("❌ 網路連線錯誤：" + err.message);
-                    console.error(err);
-                }
+                    } else { customAlert("❌ 刪除失敗：" + result.message); }
+                } catch (err) { customAlert("❌ 網路連線錯誤：" + err.message); }
             });
+        }
+
+        // 💡新增：開啟編輯視窗並自動帶入舊資料
+        function openEditModal(id) {
+            if(!id || id === 'undefined' || id === 'null' || id === '') {
+                return customAlert("⚠️ 編輯失敗：這筆紀錄沒有有效 ID。\n請直接前往 Google 試算表手動修改該列！");
+            }
+
+            // 在現有紀錄中找出要編輯的那一筆
+            const record = records.find(r => (r['ID'] || r['id'] || r['Id']) === id);
+            if (!record) return customAlert("找不到該筆紀錄資料。");
+
+            editingRecordId = id;
+
+            // 1. 設定收支類型
+            setEditType(record['類型'] === '收入' ? '收入' : '支出');
+
+            // 2. 設定日期 (需要轉為 YYYY-MM-DD 格式供 input=date 使用)
+            const d = new Date(record['日期']);
+            const yyyy = d.getFullYear();
+            const mm = String(d.getMonth() + 1).padStart(2, '0');
+            const dd = String(d.getDate()).padStart(2, '0');
+            document.getElementById('editDate').value = `${yyyy}-${mm}-${dd}`;
+
+            // 3. 填入其他文字資料
+            document.getElementById('editAmount').value = parseFloat(record['金額']);
+            document.getElementById('editTags').value = record['標籤'] || '';
+            document.getElementById('editNote').value = record['備註'] || '';
+
+            // 4. 設定下拉選單分類 (等待DOM更新一下再選取)
+            setTimeout(() => {
+                document.getElementById('editCategory').value = record['分類'];
+            }, 10);
+
+            // 顯示視窗
+            document.getElementById('editModal').classList.remove('hidden');
+        }
+
+        // 💡新增：關閉編輯視窗
+        function closeEditModal() {
+            document.getElementById('editModal').classList.add('hidden');
+            editingRecordId = null;
+        }
+
+        // 💡新增：送出編輯更新
+        async function saveEditRecord() {
+            if (!editingRecordId) return;
+            const url = localStorage.getItem('gas_url');
+            const sanitizedAmount = parseFloat(toHalfWidth(document.getElementById('editAmount').value));
+            
+            if(isNaN(sanitizedAmount) || sanitizedAmount <= 0) return customAlert("請輸入正確的數字金額");
+            
+            const btn = document.getElementById('saveEditBtn');
+            btn.disabled = true; btn.innerHTML = '<div class="loading-spinner"></div> 處理中...';
+            
+            const payload = {
+                action: "updateRecord", 
+                id: String(editingRecordId),
+                type: currentEditType, 
+                amount: sanitizedAmount, 
+                category: document.getElementById('editCategory').value, 
+                date: document.getElementById('editDate').value, 
+                note: document.getElementById('editNote').value, 
+                tags: document.getElementById('editTags').value 
+            };
+
+            try {
+                const res = await fetch(url, { 
+                    method: 'POST', 
+                    body: JSON.stringify(payload),
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' }
+                });
+                
+                const textData = await res.text();
+                let result;
+                try { result = JSON.parse(textData); } catch (e) { throw new Error(textData.substring(0, 100)); }
+                
+                if (result.status === "success") {
+                    showToast("紀錄修改成功");
+                    closeEditModal();
+                    await fetchData(); 
+                } else {
+                    throw new Error(result.message || "後端更新失敗");
+                }
+            } catch (err) { 
+                customAlert("❌ 修改失敗：" + err.message);
+            } finally { 
+                btn.disabled = false; btn.innerHTML = '儲存變更'; 
+            }
         }
 
         async function analyzeWithAI() {
