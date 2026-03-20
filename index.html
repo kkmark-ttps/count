@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>個人收支管理系統 (資產加強版)</title>
+    <title>個人收支管理系統 (專業定製版)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/lucide@latest"></script>
@@ -51,7 +51,8 @@
             <span class="bg-blue-600 p-1.5 rounded-lg text-white"><i data-lucide="wallet" class="w-5 h-5"></i></span>
             智慧帳務管家
         </h1>
-        <button onclick="toggleModal('settingsModal')" class="p-2 text-gray-400 hover:bg-gray-100 rounded-full transition">
+        <!-- 💡 設定按鈕：若 DEFAULT_GAS_URL 不為空則會被 JS 隱藏 -->
+        <button id="settingsBtn" onclick="toggleModal('settingsModal')" class="p-2 text-gray-400 hover:bg-gray-100 rounded-full transition">
             <i data-lucide="settings" class="w-5 h-5"></i>
         </button>
     </nav>
@@ -173,19 +174,17 @@
         </div>
     </div>
 
-    <!-- 💡新增：編輯紀錄 Modal -->
+    <!-- 編輯紀錄 Modal -->
     <div id="editModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
         <div class="bg-white w-full max-w-sm rounded-[2.5rem] p-6 space-y-4 shadow-2xl overflow-y-auto max-h-[90vh]">
             <div class="flex justify-between items-center mb-2">
                 <h3 class="text-xl font-extrabold text-gray-800">編輯紀錄</h3>
                 <button onclick="closeEditModal()" class="p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition"><i data-lucide="x" class="w-4 h-4"></i></button>
             </div>
-            
             <div class="flex p-1 bg-gray-100 rounded-xl">
                 <button onclick="setEditType('支出')" id="btn-edit-type-expense" class="flex-1 py-2 rounded-lg font-bold text-sm transition">支出</button>
                 <button onclick="setEditType('收入')" id="btn-edit-type-income" class="flex-1 py-2 rounded-lg font-bold text-sm transition">收入</button>
             </div>
-
             <div class="space-y-4">
                 <div class="relative">
                     <span class="absolute left-0 bottom-3 text-gray-400 font-medium">NT$</span>
@@ -216,7 +215,7 @@
         </div>
     </div>
 
-    <!-- 自訂警告視窗 (Custom Alert) -->
+    <!-- 自訂警告視窗 -->
     <div id="alertModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
         <div class="bg-white w-full max-w-sm rounded-[2rem] p-6 space-y-4 shadow-2xl">
             <h3 class="text-lg font-bold text-gray-800 flex items-center gap-2">
@@ -227,7 +226,7 @@
         </div>
     </div>
 
-    <!-- 自訂確認視窗 (Custom Confirm) -->
+    <!-- 自訂確認視窗 -->
     <div id="confirmModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
         <div class="bg-white w-full max-w-sm rounded-[2rem] p-6 space-y-4 shadow-2xl">
             <h3 class="text-lg font-bold text-gray-800 flex items-center gap-2">
@@ -242,6 +241,13 @@
     </div>
 
     <script>
+        /**
+         * 💡 原始碼硬編碼設定區 (DEFAULT_GAS_URL)
+         * 如果您想將系統固定給特定的 API 使用，請在下方引號內填入您的 GAS Web App URL。
+         * 例如: const DEFAULT_GAS_URL = "https://script.google.com/macros/s/XXXXX/exec";
+         */
+        const DEFAULT_GAS_URL = "https://script.google.com/macros/s/AKfycbzEEBJdUAuGKccZ1kbziCQ0GB0F_buQiLL_-CUU9AWs_HRGlnC7XufEnjWXw5ZozEJ8/exec"; 
+
         let currentType = '支出';
         let currentEditType = '支出';
         let editingRecordId = null;
@@ -249,6 +255,28 @@
         let records = [];
         let accounts = [];
         let confirmActionCallback = null; 
+
+        /**
+         * 💡 取得當前有效的 GAS URL (核心邏輯)
+         * 優先權：網址參數 (?config=...) > 本地儲存 (LocalStorage) > 硬編碼 (DEFAULT_GAS_URL)
+         */
+        function getEffectiveUrl() {
+            // 1. 檢查網址參數
+            const urlParams = new URLSearchParams(window.location.search);
+            const configUrl = urlParams.get('config');
+            if (configUrl) {
+                const decodedUrl = decodeURIComponent(configUrl);
+                localStorage.setItem('gas_url', decodedUrl); // 存入本地以便下次使用
+                return decodedUrl;
+            }
+
+            // 2. 檢查本地儲存
+            const storedUrl = localStorage.getItem('gas_url');
+            if (storedUrl) return storedUrl;
+
+            // 3. 回傳硬編碼預設值
+            return DEFAULT_GAS_URL;
+        }
 
         function customAlert(msg) {
             document.getElementById('alertMessage').textContent = msg;
@@ -290,6 +318,12 @@
             lucide.createIcons();
             document.getElementById('inputDate').valueAsDate = new Date();
             
+            // 💡 介面控制：若 DEFAULT_GAS_URL 已經填寫，則隱藏設定按鈕
+            if (DEFAULT_GAS_URL !== "") {
+                const btn = document.getElementById('settingsBtn');
+                if (btn) btn.classList.add('hidden');
+            }
+
             const amountInput = document.getElementById('inputAmount');
             amountInput.addEventListener('input', function(e) {
                 const start = this.selectionStart;
@@ -298,7 +332,6 @@
                 this.setSelectionRange(start, end);
             });
 
-            // 為編輯視窗的金額輸入框加入全形轉換
             const editAmountInput = document.getElementById('editAmount');
             editAmountInput.addEventListener('input', function(e) {
                 const start = this.selectionStart;
@@ -312,7 +345,7 @@
         };
 
         function loadSettings() {
-            const url = localStorage.getItem('gas_url');
+            const url = localStorage.getItem('gas_url') || DEFAULT_GAS_URL;
             if (url) document.getElementById('gasUrlInput').value = url;
             const key = localStorage.getItem('gemini_api_key');
             if (key) document.getElementById('geminiKeyInput').value = key;
@@ -344,7 +377,6 @@
             document.getElementById(`tab-${tab}`).className = "flex-1 py-2.5 rounded-xl font-bold text-xs transition tab-active";
         }
 
-        // 新增紀錄表單的類型切換
         function setType(type) {
             currentType = type;
             const isExp = type === '支出';
@@ -362,7 +394,6 @@
             });
         }
 
-        // 💡新增：編輯表單的類型切換與分類渲染
         function setEditType(type) {
             currentEditType = type;
             const isExp = type === '支出';
@@ -378,7 +409,7 @@
         }
 
         async function fetchData() {
-            const url = localStorage.getItem('gas_url');
+            const url = getEffectiveUrl();
             if (!url) return;
             try {
                 const [sumRes, recRes, catRes, accRes] = await Promise.all([
@@ -431,7 +462,7 @@
         }
 
         async function updateAccount(name) {
-            const url = localStorage.getItem('gas_url');
+            const url = getEffectiveUrl();
             const btn = document.getElementById(`btn-acc-${name}`);
             let sanitizedAmount = parseFloat(toHalfWidth(document.getElementById(`acc-${name}`).value));
             
@@ -549,7 +580,6 @@
                     const recordId = r['ID'] || r['id'] || r['Id'];
                     const dateString = new Date(r['日期']).toLocaleDateString('zh-TW');
 
-                    // 💡更新：在明細右側加入「編輯(筆)」圖示按鈕
                     card.innerHTML = `
                         <div class="flex items-center gap-3 text-left">
                             <div class="w-10 h-10 rounded-xl ${isExp ? 'bg-rose-50 text-rose-500' : 'bg-emerald-50 text-emerald-500'} flex items-center justify-center shadow-sm">
@@ -595,7 +625,7 @@
         }
 
         async function submitRecord() {
-            const url = localStorage.getItem('gas_url');
+            const url = getEffectiveUrl();
             const sanitizedAmount = parseFloat(toHalfWidth(document.getElementById('inputAmount').value));
             
             if(isNaN(sanitizedAmount) || sanitizedAmount <= 0) return customAlert("請輸入正確的數字金額");
@@ -640,7 +670,7 @@
             }
 
             showConfirm('刪除紀錄', '確定要刪除這筆明細嗎？此操作將無法復原。', async () => {
-                const url = localStorage.getItem('gas_url');
+                const url = getEffectiveUrl();
                 try {
                     const res = await fetch(url, { 
                         method: 'POST', 
@@ -659,59 +689,40 @@
             });
         }
 
-        // 💡新增：開啟編輯視窗並自動帶入舊資料
         function openEditModal(id) {
             if(!id || id === 'undefined' || id === 'null' || id === '') {
                 return customAlert("⚠️ 編輯失敗：這筆紀錄沒有有效 ID。\n請直接前往 Google 試算表手動修改該列！");
             }
-
-            // 在現有紀錄中找出要編輯的那一筆
             const record = records.find(r => (r['ID'] || r['id'] || r['Id']) === id);
             if (!record) return customAlert("找不到該筆紀錄資料。");
-
             editingRecordId = id;
-
-            // 1. 設定收支類型
             setEditType(record['類型'] === '收入' ? '收入' : '支出');
-
-            // 2. 設定日期 (需要轉為 YYYY-MM-DD 格式供 input=date 使用)
             const d = new Date(record['日期']);
             const yyyy = d.getFullYear();
             const mm = String(d.getMonth() + 1).padStart(2, '0');
             const dd = String(d.getDate()).padStart(2, '0');
             document.getElementById('editDate').value = `${yyyy}-${mm}-${dd}`;
-
-            // 3. 填入其他文字資料
             document.getElementById('editAmount').value = parseFloat(record['金額']);
             document.getElementById('editTags').value = record['標籤'] || '';
             document.getElementById('editNote').value = record['備註'] || '';
-
-            // 4. 設定下拉選單分類 (等待DOM更新一下再選取)
             setTimeout(() => {
                 document.getElementById('editCategory').value = record['分類'];
             }, 10);
-
-            // 顯示視窗
             document.getElementById('editModal').classList.remove('hidden');
         }
 
-        // 💡新增：關閉編輯視窗
         function closeEditModal() {
             document.getElementById('editModal').classList.add('hidden');
             editingRecordId = null;
         }
 
-        // 💡新增：送出編輯更新
         async function saveEditRecord() {
             if (!editingRecordId) return;
-            const url = localStorage.getItem('gas_url');
+            const url = getEffectiveUrl();
             const sanitizedAmount = parseFloat(toHalfWidth(document.getElementById('editAmount').value));
-            
             if(isNaN(sanitizedAmount) || sanitizedAmount <= 0) return customAlert("請輸入正確的數字金額");
-            
             const btn = document.getElementById('saveEditBtn');
             btn.disabled = true; btn.innerHTML = '<div class="loading-spinner"></div> 處理中...';
-            
             const payload = {
                 action: "updateRecord", 
                 id: String(editingRecordId),
@@ -722,18 +733,15 @@
                 note: document.getElementById('editNote').value, 
                 tags: document.getElementById('editTags').value 
             };
-
             try {
                 const res = await fetch(url, { 
                     method: 'POST', 
                     body: JSON.stringify(payload),
                     headers: { 'Content-Type': 'text/plain;charset=utf-8' }
                 });
-                
                 const textData = await res.text();
                 let result;
                 try { result = JSON.parse(textData); } catch (e) { throw new Error(textData.substring(0, 100)); }
-                
                 if (result.status === "success") {
                     showToast("紀錄修改成功");
                     closeEditModal();
@@ -741,11 +749,8 @@
                 } else {
                     throw new Error(result.message || "後端更新失敗");
                 }
-            } catch (err) { 
-                customAlert("❌ 修改失敗：" + err.message);
-            } finally { 
-                btn.disabled = false; btn.innerHTML = '儲存變更'; 
-            }
+            } catch (err) { customAlert("❌ 修改失敗：" + err.message);
+            } finally { btn.disabled = false; btn.innerHTML = '儲存變更'; }
         }
 
         async function analyzeWithAI() {
@@ -755,7 +760,8 @@
             btn.disabled = true; btn.innerHTML = '<div class="loading-spinner"></div> 分析中...';
             const context = `總資產:${document.getElementById('totalAssetsDisp').textContent}, 本月支出:${document.getElementById('mExpenseDisp').textContent}`;
             try {
-                const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+                const res = await fetch(url, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ contents: [{ parts: [{ text: `分析本月財務：${context}` }] }] })
                 });
